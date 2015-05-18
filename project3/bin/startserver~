@@ -1,0 +1,32 @@
+#!/usr/bin/python
+import os
+import sys
+import time
+import urllib2
+import json
+cfg=json.load(open('conf/settings.conf'))
+primary=cfg['primary']
+backup=cfg['backup']
+port=cfg['port']
+if len(sys.argv)>=2 and sys.argv[1]=='-p':
+	if os.fork()>0:
+		while True:
+			try:
+				urllib2.urlopen('http://%s:%s/kvman/countkey'%(primary,port)).read()
+				break
+			except Exception as e:
+				time.sleep(0.1)
+		sys.exit(0)
+	os.execv('./serveprimary',('serveprimary',))
+elif len(sys.argv)>=2 and sys.argv[1]=='-b':
+	if os.fork()>0:
+		while True:
+			try:
+				urllib2.urlopen('http://%s:%s/kvman/countkey'%(backup,port)).read()
+				break
+			except Exception as e:
+				time.sleep(0.1)
+		sys.exit(0)
+	os.execv('./servebackup',('servebackup','backup'))
+else:
+	print 'which server do you want to start?'
