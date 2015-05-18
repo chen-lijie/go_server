@@ -1,4 +1,5 @@
-#!/bin/python
+#!/usr/bin/python
+import sys
 import urllib
 import urllib2
 import json
@@ -10,14 +11,21 @@ url = 'http://' + conf['primary'] + ':' + conf['port']
 
 inserttime = []
 gettime = []
+totalinsert = 0
+successinsert = 0
 def insert(key, value):
+	global totalinsert
+	global successinsert
 	para = urllib.urlencode({'key': key, 'value': value})
-	print para
 	time1 = time.time()
 	f = urllib2.urlopen(url + '/kv/insert', para)
 	time2 = time.time()
 	inserttime.append(time2 - time1)
-	return f.read()
+	re = f.read()
+	totalinsert = totalinsert + 1
+	if re.find('success') != -1:
+		successinsert = successinsert + 1
+	return re
 
 def delete(key):
 	para = urllib.urlencode({'key': key})
@@ -52,7 +60,6 @@ def shutdown():
 def clear():
 	data = json.loads(dump())
 	for i in data:
-		print get(i[0]), countkey()
 		delete(i[0])
 
 
@@ -61,26 +68,39 @@ os.system('../bin/stopserver -b')
 os.system('../bin/startserver -b')
 os.system('../bin/startserver -p')
 
-for i in conf:
-	print insert(i, 'QWERTY')
+success = True
+for i in range(4000):
+	insert(str(i), str(i))
 data = json.loads(dump())
-for i in data:
-	print get(i[0]), countkey()
-	delete(i[0])
-print update('clj', 'FHQ')
-print insert('clj', 'fhq')
-print insert('', ' ')
-print dump()
-print update('clj', 'fHQ')
-print insert('fhq', 'clj')
-print insert('&&', 'clj')
+for i in range(4000):
+	get(i)
+	countkey()
+	delete(i)
+update('clj', 'FHQ')
+insert('clj', 'fhq')
+insert('', ' ')
+dump()
+update('clj', 'fHQ')
+insert('fhq', 'clj')
+insert('&&', 'clj')
 clear()
-print insert('\xce\xd2\xe6\x88\x91', '\x62\x11')
-print insert('\xce\xd3\xe6\x88\x91', '\x62\x11')
-print insert('A', '~')
-print insert(' !@#$%^&*()', '\x00\x01\x02\x03\x04')
-print dump()
-print 'Insertion:', "%f/%f" % (sum(inserttime) / len(inserttime), sum(gettime) / len(gettime))
+insert('\xce\xd2\xe6\x88\x91', '\x62\x11')
+insert('\xce\xd3\xe6\x88\x91', '\x62\x11')
+insert('A', '~')
+insert(' !@#$%^&*()', '\x00\x01\x02\x03\x04')
+dump()
 
+if success:
+	print 'Result: success'
+else:
+	print 'Result: fail'
+print >>sys.stderr, 'Insertion', '%d/%d' % (successinsert, totalinsert) 
+print >>sys.stderr, 'Average latency:', "%f/%f" % (sum(inserttime) / len(inserttime), sum(gettime) / len(gettime))
+
+inserttime = sorted(inserttime)
+gettime = sorted(gettime)
+print >>sys.stderr, 'Percentile latency:'
+for i in range(10):
+	print >>sys.stderr, inserttime[len(inserttime) * i / 10], gettime[len(gettime) * i / 10]
 os.system('../bin/stopserver -p')
 os.system('../bin/stopserver -b')
