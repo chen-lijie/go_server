@@ -5,7 +5,7 @@ import urllib2
 import json
 import os
 import time
-conf = json.loads(open('../conf/settings.conf').read())
+conf = json.loads(open('conf/settings.conf').read())
 
 url = 'http://' + conf['primary'] + ':' + conf['port']
 
@@ -63,10 +63,10 @@ def clear():
 		delete(i[0])
 
 
-os.system('../bin/stopserver -p')
-os.system('../bin/stopserver -b')
-os.system('../bin/startserver -b')
-os.system('../bin/startserver -p')
+os.system('bin/stopserver -p')
+os.system('bin/stopserver -b')
+os.system('bin/startserver -b')
+os.system('bin/startserver -p')
 
 success = True
 for i in range(4000):
@@ -102,5 +102,5 @@ gettime = sorted(gettime)
 print >>sys.stderr, 'Percentile latency:'
 for i in range(10):
 	print >>sys.stderr, inserttime[len(inserttime) * i / 10], gettime[len(gettime) * i / 10]
-os.system('../bin/stopserver -p')
-os.system('../bin/stopserver -b')
+os.system('bin/stopserver -p')
+os.system('bin/stopserver -b')

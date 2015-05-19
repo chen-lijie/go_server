@@ -4,7 +4,7 @@ import sys
 import time
 import urllib2
 import json
-cfg=json.load(open('../conf/settings.conf'))
+cfg=json.load(open('conf/settings.conf'))
 primary=cfg['primary']
 backup=cfg['backup']
 port=cfg['port']
@@ -17,7 +17,7 @@ if len(sys.argv)>=2 and sys.argv[1]=='-p':
 			except Exception as e:
 				time.sleep(0.1)
 		sys.exit(0)
-	os.execv('./serveprimary',('serveprimary',))
+	os.execv('bin/serveprimary',('serveprimary',))
 elif len(sys.argv)>=2 and sys.argv[1]=='-b':
 	if os.fork()>0:
 		while True:
@@ -27,6 +27,6 @@ elif len(sys.argv)>=2 and sys.argv[1]=='-b':
 			except Exception as e:
 				time.sleep(0.1)
 		sys.exit(0)
-	os.execv('./servebackup',('servebackup','backup'))
+	os.execv('bin/servebackup',('servebackup','backup'))
 else:
 	print 'which server do you want to start?'

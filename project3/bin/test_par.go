@@ -38,35 +38,10 @@ func add(key,value string) ([]byte){
 	return robots
 }
 
-func get(key string) ([]byte) {
-	res, err := http.PostForm(server_url + "/kv/get?",
-	url.Values{"key": {key} })
-	if err != nil {
-		panic(err)
-	}
-	robots, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		panic(err)
-	}
-	return robots
-}
-
 var failed bool
 
 func addAndGet(key,value string,ch chan int){
 	add(key,value)
-	result := get(key)
-	var f interface{}
-	err := json.Unmarshal(result, &f)
-	if err != nil{
-		panic(err)
-	}
-	m := f.(map[string]interface{})
-	ok := m["success"].(string)
-	if ok != "true" {
-		failed = true
-	}
 	ch<-1
 }
 
@@ -98,11 +73,11 @@ func main() {
 	fmt.Println(server_url)
 	ch := make(chan int)
 
-	for i:=0;i<10000;i++ {
+	for i:=0;i<4000;i++ {
 		go addAndGet(string(i),string(i),ch)
 	}
 
-	for i:=0;i<10000;i++ {
+	for i:=0;i<4000;i++ {
 		<-ch
 	}
 

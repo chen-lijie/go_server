@@ -300,7 +300,7 @@ func main() {
 	} else {
 		is_primary = true
 	}
-	configstr,err:=ioutil.ReadFile("../conf/settings.conf")
+	configstr,err:=ioutil.ReadFile("conf/settings.conf")
 	if err != nil{
 		fmt.Println("cannot find config file")
 		panic(err)
