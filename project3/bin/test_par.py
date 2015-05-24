@@ -5,6 +5,7 @@ import urllib2
 import json
 import os
 import time
+import threading
 
 from multiprocessing import Pool
 from multiprocessing.dummy import Pool as ThreadPool
@@ -17,6 +18,9 @@ inserttime = []
 gettime = []
 totalinsert = 0
 successinsert = 0
+
+mutex = threading.Lock()
+
 def insert(key, value):
 	global totalinsert
 	global successinsert
@@ -26,9 +30,11 @@ def insert(key, value):
 	time2 = time.time()
 	inserttime.append(time2 - time1)
 	re = f.read()
+	mutex.acquire()
 	totalinsert = totalinsert + 1
 	if re.find('success') != -1:
 		successinsert = successinsert + 1
+	mutex.release()
 	return re
 
 def delete(key):
@@ -79,8 +85,31 @@ os.system('bin/startserver -b')
 os.system('bin/startserver -p')
 
 success = True
+
 pool = ThreadPool(20)
 pool.map(insertAndGet,range(4000))
+
+#shutdown the primary
+os.system('bin/stopserver -p')
+#restart the primary, it should still hold the data
+os.system('bin/startserver -p')
+for i in range(4000):
+	re=get(i)
+	if re.find('true') == -1:
+		success = False;
+
+#shutdown and restart every thing
+os.system('bin/stopserver -p')
+os.system('bin/stopserver -b')
+os.system('bin/startserver -b')
+os.system('bin/startserver -p')
+
+#now, it should lost all the data!
+for i in range(4000):
+	re=get(i)
+	if re.find('true') != -1:
+		success = False;
+
 data = json.loads(dump())
 update('clj', 'FHQ')
 insert('clj', 'fhq')
