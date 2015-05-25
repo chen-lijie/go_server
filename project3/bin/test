@@ -111,20 +111,29 @@ for i in range(4000):
 		success = False;
 
 data = json.loads(dump())
-update('clj', 'FHQ')
-insert('clj', 'fhq')
-insert('', ' ')
-dump()
-update('clj', 'fHQ')
-insert('fhq', 'clj')
-insert('&&', 'clj')
-clear()
-insert('\xce\xd2\xe6\x88\x91', '\x62\x11')
-insert('\xce\xd3\xe6\x88\x91', '\x62\x11')
-insert('A', '~')
-insert(' !@#$%^&*()', '\x00\x01\x02\x03\x04')
-dump()
+a = insert('clj', 'fhq')
+b = update('clj', 'FHQ')
+c = get('clj')
+d = countkey()
+e = delete('clj')
+f = insert(' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~', '')
+g = dump()
 
+for i in range(1):
+	if json.loads(a) != {"success":"true"}:
+		success = False
+	if json.loads(b) != {"success":"true"}:
+		success = False
+	if json.loads(c) != {"success":"true","value":"FHQ"}:
+		success = False
+	if json.loads(d) != {"result":"1"}:
+		success = False
+	if json.loads(e) != {"success":"true","value":"FHQ"}:
+		success = False
+	if json.loads(f) != {"success":"true"}:
+		success = False
+	if json.loads(g) != [[u' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~', u'']]:
+		success = False
 if success:
 	print 'Result: success'
 else:
