@@ -101,7 +101,9 @@ var datamanager *DataManager
 
 func NotImplementedHandler(w http.ResponseWriter, r *http.Request) {
 	//this is not a valid json so that the user's code is broken instead of failing silently
-	w.WriteHeader(501)
+
+	// Now, it's used to check alive.
+	w.WriteHeader(200)
 	fmt.Fprintln(w, "Sorry, this feature has not been implemented yet")
 }
 func InsertHandler(w http.ResponseWriter, r * http.Request) {

@@ -12,6 +12,7 @@ from multiprocessing import Pool
 from multiprocessing.dummy import Pool as ThreadPool
 
 conf = json.loads(open('conf/settings.conf').read())
+nquerys = 44 # Thanks to fhq
 
 def geturl():
 	return 'http://' + '127.0.0.%d' % random.randint(1, 3) + ':' + conf['port']
@@ -76,10 +77,10 @@ def clear():
 def insertAndGet(key):
 	global success
 	insert(str(key),str(key))
-	if key == 21:
-		os.system('bin/stopserver 3')
-	if key == 33:
-		os.system('bin/stopserver 4')
+#	if key == 21:
+#		os.system('bin/stopserver 3')
+#	if key == 33:
+#		os.system('bin/stopserver 4')
 	re=get(key)
 	if re.find('true') == -1:
 		success = False;
@@ -105,9 +106,12 @@ os.system('bin/startserver 4')
 success = True
 
 pool = ThreadPool(20)
-pool.map(insertAndGet,range(44))
-pool.map(insertAndGetSame,range(44))
-for i in range(44):
+for i in range(nquerys):
+	insertAndGet(i)
+	insertAndGetSame(i)
+#pool.map(insertAndGet,range(nquerys))
+#pool.map(insertAndGetSame,range(nquerys))
+for i in range(nquerys):
         re=get(i)
         if re.find('true') == -1:
                 success = False;

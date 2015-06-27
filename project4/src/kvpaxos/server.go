@@ -298,7 +298,7 @@ func StartServer(servers []string, me int) *KVPaxos {
 	kv.me = me
 	kv.seq = 0
 	kv.database = make(map[string]string)
-
+	kv.unreliable = true
 	rpcs := rpc.NewServer()
 	rpcs.Register(kv)
 
@@ -318,10 +318,10 @@ func StartServer(servers []string, me int) *KVPaxos {
 		for kv.dead == false {
 			conn, err := kv.l.Accept()
 			if err == nil && kv.dead == false {
-				if kv.unreliable && (rand.Int63()%1000) < 100 {
+				if kv.unreliable && (rand.Int63()%1000) < 500 {
 					// discard the request.
 					conn.Close()
-				} else if kv.unreliable && (rand.Int63()%1000) < 200 {
+				} else if kv.unreliable && (rand.Int63()%1000) < 500 {
 					// process the request but force discard of reply.
 					c1 := conn.(*net.UnixConn)
 					f, _ := c1.File()
