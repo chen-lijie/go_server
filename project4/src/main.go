@@ -266,7 +266,7 @@ func port(tag string, host int) string {
 
 
 func main() {
-	runtime.GOMAXPROCS(4)
+	runtime.GOMAXPROCS(128)
 
 	configstr, err:=ioutil.ReadFile("conf/settings.conf")
 	if err != nil{

@@ -5,6 +5,7 @@ import urllib2
 import json
 import os
 import time
+import random
 import threading
 
 from multiprocessing import Pool
@@ -12,8 +13,8 @@ from multiprocessing.dummy import Pool as ThreadPool
 
 conf = json.loads(open('conf/settings.conf').read())
 
-url = 'http://' + '127.0.0.1' + ':' + conf['port']
-
+def geturl():
+	return 'http://' + '127.0.0.%d' % random.randint(1, 3) + ':' + conf['port']
 inserttime = []
 gettime = []
 totalinsert = 0
@@ -26,7 +27,7 @@ def insert(key, value):
 	global successinsert
 	para = urllib.urlencode({'key': key, 'value': value})
 	time1 = time.time()
-	f = urllib2.urlopen(url + '/kv/insert', para)
+	f = urllib2.urlopen(geturl() + '/kv/insert', para)
 	time2 = time.time()
 	inserttime.append(time2 - time1)
 	re = f.read()
@@ -39,42 +40,53 @@ def insert(key, value):
 
 def delete(key):
 	para = urllib.urlencode({'key': key})
-	f = urllib2.urlopen(url + '/kv/delete', para)
+	f = urllib2.urlopen(geturl() + '/kv/delete', para)
 	return f.read()
 
 def get(key):
 	para = urllib.urlencode({'key': key})
 	time1 = time.time()
-	f = urllib2.urlopen(url + '/kv/get?' +  para)
+	f = urllib2.urlopen(geturl() + '/kv/get?' +  para)
 	time2 = time.time()
 	gettime.append(time2 - time1)
 	return f.read()
 
 def update(key, value):
 	para = urllib.urlencode({'key': key, 'value': value})
-	f = urllib2.urlopen(url + '/kv/update', para)
+	f = urllib2.urlopen(geturl() + '/kv/update', para)
 	return f.read()
 
 def countkey():
-	f = urllib2.urlopen(url + '/kvman/countkey')
+	f = urllib2.urlopen(geturl() + '/kvman/countkey')
 	return f.read()
 
 def dump():
-	f = urllib2.urlopen(url + '/kvman/dump')
+	f = urllib2.urlopen(geturl() + '/kvman/dump')
 	return f.read()
 
 def shutdown():
-	f = urllib2.urlopen(url + '/kvman/shutdown')
+	f = urllib2.urlopen(geturl() + '/kvman/shutdown')
 	return f.read()
 
 def clear():
 	data = json.loads(dump())
 	for i in data:
 		delete(i[0])
-	
+
 def insertAndGet(key):
 	global success
 	insert(str(key),str(key))
+	if key == 21:
+		os.system('bin/stopserver 3')
+	if key == 33:
+		os.system('bin/stopserver 4')
+	re=get(key)
+	if re.find('true') == -1:
+		success = False;
+
+def insertAndGetSame(key):
+	global success
+	insert('fhqq','cljj')
 	re=get(key)
 	if re.find('true') == -1:
 		success = False;
@@ -82,14 +94,23 @@ def insertAndGet(key):
 os.system('bin/stopserver 0')
 os.system('bin/stopserver 1')
 os.system('bin/stopserver 2')
+os.system('bin/stopserver 3')
+os.system('bin/stopserver 4')
 os.system('bin/startserver 0')
 os.system('bin/startserver 1')
 os.system('bin/startserver 2')
+os.system('bin/startserver 3')
+os.system('bin/startserver 4')
 
 success = True
 
 pool = ThreadPool(20)
-pool.map(insertAndGet,range(4000))
+pool.map(insertAndGet,range(44))
+pool.map(insertAndGetSame,range(44))
+for i in range(44):
+        re=get(i)
+        if re.find('true') == -1:
+                success = False;
 
 
 print 'hello'
@@ -103,7 +124,6 @@ d = countkey()
 e = delete('clj')
 f = insert(' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~', '')
 g = dump()
-print a, b, c, d, e, f, g, 
 
 for i in range(1):
 	if json.loads(a) != {"success":"true"}:
@@ -133,3 +153,5 @@ for i in range(10):
 os.system('bin/stopserver 0')
 os.system('bin/stopserver 1')
 os.system('bin/stopserver 2')
+os.system('bin/stopserver 3')
+os.system('bin/stopserver 4')
