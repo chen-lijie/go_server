@@ -52,8 +52,6 @@ const (
 	ACCEPTOK      = "AcceptOK"
 	ACCEPTREJECT  = "AcceptReject"
 	DECIDED       = "Decided"
-	DECIDEDOK     = "DecidedOK"
-	DECIDEDREJECT = "DecidedReject"
 )
 
 type AcceptorArgs struct {
@@ -246,21 +244,12 @@ func (px *Paxos) Proposer(seq int, v interface{}) {
 			continue
 		}
 		args.Type = DECIDED
-		dcount := 0
 		for i := 0; i < len(px.peers); i++ {
 			var reply AcceptorReply
-			ok := false
 			if i == px.me {
-				err := px.Acceptor(args, &reply)
-				if err == nil {
-					ok = true
-				}
+				px.Acceptor(args, &reply)
 			} else {
-				ok = call(px.peers[i], "Paxos.Acceptor", args, &reply)
-			}
-
-			if ok && reply.RType == DECIDEDOK {
-				dcount++
+				call(px.peers[i], "Paxos.Acceptor", args, &reply)
 			}
 		}
 
@@ -299,9 +288,10 @@ func (px *Paxos) Acceptor(args *AcceptorArgs, reply *AcceptorReply) error {
 
 			reply.RType = ACCEPTOK
 			reply.AcceptorNumber = args.ProposalNumber
+		} else {
+			reply.RType = ACCEPTREJECT
 		}
 	case DECIDED:
-		reply.RType = DECIDEDOK
 		px.DecideList[args.Seq] = args.ProposalValue
 	default:
 		panic("Impossible place.")
