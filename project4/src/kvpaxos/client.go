@@ -5,7 +5,11 @@ import (
 	"math/big"
 	"net/rpc"
 	"sync"
+
 )
+import "net/http"
+import "fmt"
+//import "time"
 
 type Clerk struct {
 	servers []string
@@ -16,10 +20,12 @@ type Clerk struct {
 	ch       map[int]chan int
 }
 
-func MakeClerk(servers []string) *Clerk {
+func MakeClerk(servers []string, index int) *Clerk {
 	ck := new(Clerk)
 	ck.servers = servers
 	// You'll have to add code here.
+
+
 	ck.seq = 0
 	ck.clientID = nrand()
 	ck.ch = make(map[int]chan int)
@@ -70,6 +76,12 @@ func nrand() int64 {
 	bigx, _ := rand.Int(rand.Reader, max)
 	x := bigx.Int64()
 	return x
+}
+
+func (ck *Clerk) NotImplementedHandler(w http.ResponseWriter, r *http.Request) {
+	//this is not a valid json so that the user's code is broken instead of failing silently
+	w.WriteHeader(501)
+	fmt.Fprintln(w, "Sorry, this feature has not been implemented yet")
 }
 
 func (ck *Clerk) Get(key string) string {

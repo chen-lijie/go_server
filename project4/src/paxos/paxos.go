@@ -161,7 +161,7 @@ func (px *Paxos) Proposer(seq int, v interface{}) {
 		args.Done = px.DoneList
 		temppp := (((pp.proposalNumber / len(px.peers)) + 1) * len(px.peers)) + px.me
 		px.UpdateProposal(seq, "proposalNumber", temppp)
-		args.ProposalNumber = pp.proposalNumber
+		args.ProposalNumber = temppp
 		px.mu.Unlock()
 
 		pcount := 0
@@ -234,7 +234,7 @@ func (px *Paxos) Proposer(seq int, v interface{}) {
 					acount++
 				case ACCEPTREJECT:
 					px.mu.Lock()
-					if reply.Np > pp.proposalNumber {
+					if reply.Np > px.agreement[seq].proposalNumber {
 						px.UpdateProposal(seq, "proposalNumber", reply.Np)
 					}
 					px.mu.Unlock()

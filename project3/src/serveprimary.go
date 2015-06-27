@@ -282,6 +282,7 @@ func DumpMapHandler(w http.ResponseWriter, r * http.Request) {
 	response := datamanager.DumpMap()
 	fmt.Fprintln(w, response)
 }
+
 func DumpHandler(w http.ResponseWriter, r * http.Request) {
 	response := datamanager.DumpArray()
 	fmt.Fprintln(w, response)
