@@ -29,13 +29,13 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-	ClientID  int64
+	ClientID  int
 	ClientSeq int
 	Type      string
 	Key       string
 	Value     string
-	DoHash    bool
 }
+
 
 type OpResult struct {
 	ClientSeq     int
@@ -53,8 +53,8 @@ type KVPaxos struct {
 
 	// Your definitions here.
 	seq          int
+
 	database     map[string]string
-	clientLastOp map[int64]OpResult
 }
 
 func (kv *KVPaxos) WaitDecided(seq int) interface{} {
@@ -71,25 +71,53 @@ func (kv *KVPaxos) WaitDecided(seq int) interface{} {
 	}
 }
 
-func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) string {
+func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) (string, bool) {
 	result := ""
+	success := false
 	for i := startnum; i <= seqnum; i++ {
 		dv := kv.px.DecideList[i]
 		decided, _ := dv.(Op)
 
-		previous := ""
+		fmt.Println(decided, kv.database, i)
 		if decided.Type == GET {
-			previous = kv.database[decided.Key]
-		} else if decided.Type == COUNT {
-			previous = strconv.Itoa(len(kv.database))
-		} else if decided.Type == DEL {
-			v, e := kv.database[decided.Key]
-			if !e {
-				previous = v
+			res, exist := kv.database[decided.Key]
+			if exist {
+				result = res
+				success = true
 			} else {
-				delete(kv.database, decided.Key)
-				previous = v
+				success = false
 			}
+		} else if decided.Type == INSERT {
+			_, exist := kv.database[decided.Key]
+			if exist {
+				success = false
+			} else {
+				kv.database[decided.Key] = decided.Value
+				success = true
+			}
+			result = ""
+		} else if decided.Type == UPDATE {
+			_, exist := kv.database[decided.Key]
+			if exist {
+				kv.database[decided.Key] = decided.Value
+				success = true
+			} else {
+				success = false
+			}
+			result = ""
+		} else if decided.Type == DELETE {
+			res, exist := kv.database[decided.Key]
+			if exist {
+				delete(kv.database, decided.Key)
+				result = res
+				success = true
+			} else {
+				result = ""
+				success = false
+			}
+		} else if decided.Type == COUNT {
+			result = strconv.Itoa(len(kv.database))
+			success = true
 		} else if decided.Type == DUMP {
 			items := make([][]string, len(kv.database))
 			i := 0
@@ -99,188 +127,153 @@ func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) string {
 				items[i][1]=v
 				i++
 			}
-			response,_ := json.Marshal(items)
-			previous = string(response)
+			response, _ := json.Marshal(items)
+			result = string(response)
+			success = true
 		}
-		if decided.Type == PUT {
-			kv.database[decided.Key] = decided.Value
-		} else if decided.Type == GET {
-		} else if decided.Type == COUNT {
-		}
-		kv.clientLastOp[decided.ClientID] = OpResult{decided.ClientSeq, previous}
 		kv.px.Done(i)
-		result = previous
 	}
-	return result
+	fmt.Println(result, success)
+	return result, success
 }
 
-func (kv *KVPaxos) Get(args *GetArgs, reply *GetReply) error {
+func (kv *KVPaxos) Insert(key string, value string, id int, seq int) bool {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	if args.ClientSeq == kv.clientLastOp[args.ClientID].ClientSeq {
-		reply.Value = kv.clientLastOp[args.ClientID].PreviousValue
-		reply.Err = OK
-		return nil
-	} else if args.ClientSeq < kv.clientLastOp[args.ClientID].ClientSeq {
-		reply.Err = "Something Wrong."
-		return nil
-	}
-
-	getop := Op{args.ClientID, args.ClientSeq, GET, args.Key, "", false}
+	op := Op{id, seq, INSERT, key, value}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
-		kv.px.Start(seqnum, getop)
+		kv.px.Start(seqnum, op)
 		ddvalue := kv.WaitDecided(seqnum)
 		if decidedvalue, ok := ddvalue.(Op); ok {
-			if decidedvalue != getop {
-				seqnum++
-			} else {
+			if decidedvalue == op {
 				break
 			}
+			seqnum++
 		}
 	}
 
 	kv.seq = seqnum + 1
-	reply.Value = kv.WaitAllDone(startnum, seqnum)
-	reply.Err = OK
-	return nil
+	_, ok := kv.WaitAllDone(startnum, seqnum)
+	return ok
 }
 
-func (kv *KVPaxos) Del(args *GetArgs, reply *GetReply) error {
+func (kv *KVPaxos) Update(key string, value string, id int, seq int) bool {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	if args.ClientSeq == kv.clientLastOp[args.ClientID].ClientSeq {
-		reply.Value = kv.clientLastOp[args.ClientID].PreviousValue
-		reply.Err = OK
-		return nil
-	} else if args.ClientSeq < kv.clientLastOp[args.ClientID].ClientSeq {
-		reply.Err = "Something Wrong."
-		return nil
-	}
-
-	delop := Op{args.ClientID, args.ClientSeq, DEL, args.Key, "", false}
+	op := Op{id, seq, UPDATE, key, value}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
-		kv.px.Start(seqnum, delop)
+		kv.px.Start(seqnum, op)
 		ddvalue := kv.WaitDecided(seqnum)
 		if decidedvalue, ok := ddvalue.(Op); ok {
-			if decidedvalue != delop {
-				seqnum++
-			} else {
+			if decidedvalue == op {
 				break
 			}
+			seqnum++
 		}
 	}
 
 	kv.seq = seqnum + 1
-	reply.Value = kv.WaitAllDone(startnum, seqnum)
-	reply.Err = OK
-	return nil
+	_, ok := kv.WaitAllDone(startnum, seqnum)
+	return ok
 }
 
-func (kv *KVPaxos) Count(args *GetArgs, reply *GetReply) error {
+func (kv *KVPaxos) Delete(key string, id int, seq int) (string, bool) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	if args.ClientSeq == kv.clientLastOp[args.ClientID].ClientSeq {
-		reply.Value = kv.clientLastOp[args.ClientID].PreviousValue
-		reply.Err = OK
-		return nil
-	} else if args.ClientSeq < kv.clientLastOp[args.ClientID].ClientSeq {
-		reply.Err = "Something Wrong."
-		return nil
-	}
-
-	countop := Op{args.ClientID, args.ClientSeq, COUNT, "", "", false}
+	op := Op{id, seq, DELETE, key, ""}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
-		kv.px.Start(seqnum, countop)
+		kv.px.Start(seqnum, op)
 		ddvalue := kv.WaitDecided(seqnum)
 		if decidedvalue, ok := ddvalue.(Op); ok {
-			if decidedvalue != countop {
-				seqnum++
-			} else {
+			if decidedvalue == op {
 				break
 			}
+			seqnum++
 		}
 	}
 
 	kv.seq = seqnum + 1
-	reply.Value = kv.WaitAllDone(startnum, seqnum)
-	reply.Err = OK
-	return nil
+	value, ok := kv.WaitAllDone(startnum, seqnum)
+	return value, ok
 }
 
-func (kv *KVPaxos) Dump(args *GetArgs, reply *GetReply) error {
+func (kv *KVPaxos) Count(id int, seq int) int {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	if args.ClientSeq == kv.clientLastOp[args.ClientID].ClientSeq {
-		reply.Value = kv.clientLastOp[args.ClientID].PreviousValue
-		reply.Err = OK
-		return nil
-	} else if args.ClientSeq < kv.clientLastOp[args.ClientID].ClientSeq {
-		reply.Err = "Something Wrong."
-		return nil
-	}
-
-	dumpop := Op{args.ClientID, args.ClientSeq, DUMP, "", "", false}
+	op := Op{id, seq, COUNT, "", ""}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
-		kv.px.Start(seqnum, dumpop)
+		kv.px.Start(seqnum, op)
 		ddvalue := kv.WaitDecided(seqnum)
 		if decidedvalue, ok := ddvalue.(Op); ok {
-			if decidedvalue != dumpop {
-				seqnum++
-			} else {
+			if decidedvalue == op {
 				break
 			}
+			seqnum++
 		}
 	}
 
 	kv.seq = seqnum + 1
-	reply.Value = kv.WaitAllDone(startnum, seqnum)
-	reply.Err = OK
-	return nil
+	value, _ := kv.WaitAllDone(startnum, seqnum)
+	thankstofhq, _ := strconv.Atoi(value)
+	return thankstofhq
 }
 
-func (kv *KVPaxos) Put(args *PutArgs, reply *PutReply) error {
+func (kv *KVPaxos) Dump(id int, seq int) string {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	if args.ClientSeq == kv.clientLastOp[args.ClientID].ClientSeq {
-		reply.PreviousValue = kv.clientLastOp[args.ClientID].PreviousValue
-		reply.Err = OK
-		return nil
-	} else if args.ClientSeq < kv.clientLastOp[args.ClientID].ClientSeq {
-		reply.Err = "Something Wrong."
-		return nil
-	}
-
-	putop := Op{args.ClientID, args.ClientSeq, PUT, args.Key, args.Value, args.DoHash}
+	op := Op{id, seq, DUMP, "", ""}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
-		kv.px.Start(seqnum, putop)
+		kv.px.Start(seqnum, op)
 		ddvalue := kv.WaitDecided(seqnum)
 		if decidedvalue, ok := ddvalue.(Op); ok {
-			if decidedvalue != putop {
-				seqnum++
-			} else {
+			if decidedvalue == op {
 				break
 			}
+			seqnum++
 		}
 	}
+
 	kv.seq = seqnum + 1
-	reply.PreviousValue = kv.WaitAllDone(startnum, seqnum)
-	reply.Err = OK
-	return nil
+	value, _ := kv.WaitAllDone(startnum, seqnum)
+	return value
+}
+
+func (kv *KVPaxos) Get(key string, id int, seq int) (string, bool) {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	op := Op{id, seq, GET, key, ""}
+	seqnum := kv.seq
+	startnum := seqnum
+	for {
+		kv.px.Start(seqnum, op)
+		ddvalue := kv.WaitDecided(seqnum)
+		if decidedvalue, ok := ddvalue.(Op); ok {
+			if decidedvalue == op {
+				break
+			}
+			seqnum++
+		}
+	}
+
+	kv.seq = seqnum + 1
+	value, ok := kv.WaitAllDone(startnum, seqnum)
+	return value, ok
 }
 
 // tell the server to shut itself down.
@@ -307,7 +300,6 @@ func StartServer(servers []string, me int) *KVPaxos {
 	kv.me = me
 	kv.seq = 0
 	kv.database = make(map[string]string)
-	kv.clientLastOp = make(map[int64]OpResult)
 
 	rpcs := rpc.NewServer()
 	rpcs.Register(kv)

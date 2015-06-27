@@ -5,73 +5,58 @@ import (
 	"net/http"
 	"time"
 	"io/ioutil"
-	"strings"
 	"encoding/json"
 	"sync"
 	"strconv"
 	"os"
-	"net/url"
-	"net"
 )
-
-var is_primary bool
-var partneraddress string
+import "kvpaxos"
+import "runtime"
 
 type DataManager struct{
-	userdata map[string]string
-	lock sync.RWMutex
+	seq int
+	me int
+	mu sync.Mutex
 }
 
-func NewDataManager() *DataManager{
+var kvp *kvpaxos.KVPaxos
+
+func NewDataManager(me int) *DataManager{
 	var m *DataManager = new(DataManager)
-	m.userdata = make(map[string]string)
+	m.seq = 0
+	m.me = me
 	return m
 }
 
 func (m * DataManager) Insert(key string,value string) bool {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	_,present := m.userdata[key]
-	if present {
-		return false
-	}
-	if is_primary {
-		response,err := http.Get("http://" + partneraddress + "/kv/insert?key=" + url.QueryEscape(key) + "&value=" + url.QueryEscape(value))
-		if err != nil {
-			return false
-		} else {
-			ioutil.ReadAll(response.Body)
-		}
-		response.Body.Close()
-	}
-	m.userdata[key]=value
-	return true
+	m.mu.Lock()
+	tmp := m.seq
+	m.seq += 1
+	m.mu.Unlock()
+
+	return kvp.Insert(key, value, tmp, m.me)
 }
 
-func (m * DataManager) Delete(key string) (string,bool) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	v,present := m.userdata[key]
+func (m * DataManager) Delete(key string) (string, bool) {
+	m.mu.Lock()
+	tmp := m.seq
+	m.seq += 1
+	m.mu.Unlock()
+
+	v, present := kvp.Delete(key, tmp, m.me)
 	if !present {
 		return v,false
 	}
-	if is_primary {
-		response,err := http.Get("http://" + partneraddress + "/kv/delete?key=" + url.QueryEscape(key))
-		if err != nil {
-			return "",false
-		} else {
-			ioutil.ReadAll(response.Body)
-		}
-		response.Body.Close()
-	}
-	delete(m.userdata,key)
 	return v,true
 }
 
-func (m * DataManager) Get(key string) (string,bool) {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-	v,present := m.userdata[key]
+func (m * DataManager) Get(key string) (string, bool) {
+	m.mu.Lock()
+	tmp := m.seq
+	m.seq += 1
+	m.mu.Unlock()
+
+	v, present := kvp.Get(key, tmp, m.me)
 	if !present {
 		return v,false
 	}
@@ -79,61 +64,40 @@ func (m * DataManager) Get(key string) (string,bool) {
 }
 
 func (m * DataManager) Update(key string,value string) bool {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	_,present := m.userdata[key]
+	m.mu.Lock()
+	tmp := m.seq
+	m.seq += 1
+	m.mu.Unlock()
+
+	present := kvp.Update(key, value, tmp, m.me)
 	if !present {
 		return false
 	}
-	if is_primary {
-		response,err := http.Get("http://" + partneraddress + "/kv/update?key=" + url.QueryEscape(key) + "&value=" + url.QueryEscape(value))
-		if err != nil {
-			return false
-		} else {
-			ioutil.ReadAll(response.Body)
-		}
-		response.Body.Close()
-	}
-	m.userdata[key]=value
 	return true
 }
 
 func (m * DataManager) CountKey() int {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-	return len(m.userdata)
-}
+	m.mu.Lock()
+	tmp := m.seq
+	m.seq += 1
+	m.mu.Unlock()
 
-func (m * DataManager) DumpMap() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-	response,_ := json.Marshal(m.userdata)
-	return string(response)
+	v := kvp.Count(tmp, m.me)
+	return v
 }
 
 func (m * DataManager) DumpArray() string {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-	items := make([][]string, len(m.userdata))
-	i := 0
-	for k, v := range m.userdata {
-		items[i] = make([]string,2)
-		items[i][0]=k
-		items[i][1]=v
-		i++
-	}
-	response,_ := json.Marshal(items)
-	return string(response)
-}
+	m.mu.Lock()
+	tmp := m.seq
+	m.seq += 1
+	m.mu.Unlock()
 
-func (m * DataManager) Load(dump map[string]string) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	m.userdata = dump
+	s := kvp.Dump(tmp, m.me)
+	return s
 }
 
 
-var datamanager = NewDataManager()
+var datamanager *DataManager
 
 func NotImplementedHandler(w http.ResponseWriter, r *http.Request) {
 	//this is not a valid json so that the user's code is broken instead of failing silently
@@ -279,7 +243,7 @@ func CountKeyHandler(w http.ResponseWriter, r * http.Request) {
 }
 
 func DumpMapHandler(w http.ResponseWriter, r * http.Request) {
-	response := datamanager.DumpMap()
+	response := datamanager.DumpArray()
 	fmt.Fprintln(w, response)
 }
 
@@ -295,56 +259,50 @@ func ShutdownHandler(w http.ResponseWriter, r * http.Request) {
 	shutdownchan <- 0
 }
 
+func port(tag string, host int) string {
+	s := "/var/tmp/iloveclj-" + strconv.Itoa(host)
+	return s
+}
+
+
 func main() {
-	if len(os.Args)>=2 && os.Args[1]=="backup" {
-		is_primary = false
-	} else {
-		is_primary = true
-	}
-	configstr,err:=ioutil.ReadFile("conf/settings.conf")
+	runtime.GOMAXPROCS(4)
+
+	configstr, err:=ioutil.ReadFile("conf/settings.conf")
 	if err != nil{
 		fmt.Println("cannot find config file")
 		panic(err)
 	}
-	type servercfg struct{
-		Primary, Backup, Port string
-	}
-	dec := json.NewDecoder(strings.NewReader(string(configstr)))
-	var config servercfg;
-	err = dec.Decode(&config)
-	if err != nil {
-		fmt.Println("failed to parse config file")
-		panic(err)
-	}
-	var listenaddress string
-	var listenip string
-	if is_primary {
-		listenip = config.Primary
-		partneraddress = config.Backup + ":" + config.Port
-	} else {
-		listenip = config.Backup
-		partneraddress = config.Primary + ":" + config.Port
-	}
-	listenaddress = listenip + ":" + config.Port
+	var conf map[string]interface{}
+	json.Unmarshal([]byte(configstr), &conf)
 
-	//make sure only one instance of the server is running
-	listener, err := net.Listen("tcp", listenip+":9931")
-	if err != nil {
+	if len(os.Args) != 2 {
+		fmt.Println("Usage: main nodeid")
 		return
-	} else {
-		defer listener.Close()
 	}
 
-	backupdump,err := http.Get("http://" + partneraddress + "/kvman/dumpmap")
-	if err == nil {
-		content, _ := ioutil.ReadAll(backupdump.Body)
-		dumpdata := map[string]string{}
-		json.Unmarshal(content,&dumpdata)
-		datamanager.Load(dumpdata)
-		backupdump.Body.Close()
+	me, err := strconv.Atoi(os.Args[1])
+	if err != nil {
+		fmt.Println("Usage: main nodeid(from 0)")
+		return
 	}
+
+	datamanager = NewDataManager(me)
+	name := fmt.Sprintf("n%02d", me + 1)
+	address := fmt.Sprintf("%s:%s", conf[name].(string), conf["port"].(string))
+
+	nservers := len(conf) - 1
+
+	var kvh []string = make([]string, nservers)
+	for i := 0; i < nservers; i++ {
+		kvh[i] = port("basic", i)
+	}
+
+	fmt.Println(kvh)
+	kvp = kvpaxos.StartServer(kvh, me)
+
 	s := &http.Server{
-		Addr:	listenaddress,
+		Addr:	address,
 		ReadTimeout:	10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
