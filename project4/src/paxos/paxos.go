@@ -197,7 +197,7 @@ func (px *Paxos) Proposer(seq int, v interface{}) {
 					}
 				case PREPAREREJECT:
 					px.mu.Lock()
-					if reply.Np > pp.proposalNumber {
+					if reply.Np > px.agreement[seq].proposalNumber {
 						px.UpdateProposal(seq, "proposalNumber", reply.Np)
 					}
 					px.mu.Unlock()
@@ -264,10 +264,7 @@ func (px *Paxos) Proposer(seq int, v interface{}) {
 			}
 		}
 
-		flag, _ := px.Status(seq)
-		if dcount > len(px.peers)/2 && flag {
-			break
-		}
+		break
 	}
 }
 
