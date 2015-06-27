@@ -298,7 +298,6 @@ func main() {
 		kvh[i] = port("basic", i)
 	}
 
-	fmt.Println(kvh)
 	kvp = kvpaxos.StartServer(kvh, me)
 
 	s := &http.Server{

@@ -1,0 +1,138 @@
+#!/usr/bin/python
+import sys
+import urllib
+import urllib2
+import json
+import os
+import time
+import threading
+
+from multiprocessing import Pool
+from multiprocessing.dummy import Pool as ThreadPool
+
+conf = json.loads(open('conf/settings.conf').read())
+
+url = 'http://' + '127.0.0.1' + ':' + conf['port']
+
+inserttime = []
+gettime = []
+totalinsert = 0
+successinsert = 0
+
+mutex = threading.Lock()
+
+def insert(key, value):
+	global totalinsert
+	global successinsert
+	para = urllib.urlencode({'key': key, 'value': value})
+	time1 = time.time()
+	f = urllib2.urlopen(url + '/kv/insert', para)
+	time2 = time.time()
+	inserttime.append(time2 - time1)
+	re = f.read()
+	mutex.acquire()
+	totalinsert = totalinsert + 1
+	if re.find('success') != -1:
+		successinsert = successinsert + 1
+	mutex.release()
+	return re
+
+def delete(key):
+	para = urllib.urlencode({'key': key})
+	f = urllib2.urlopen(url + '/kv/delete', para)
+	return f.read()
+
+def get(key):
+	para = urllib.urlencode({'key': key})
+	time1 = time.time()
+	f = urllib2.urlopen(url + '/kv/get?' +  para)
+	time2 = time.time()
+	gettime.append(time2 - time1)
+	return f.read()
+
+def update(key, value):
+	para = urllib.urlencode({'key': key, 'value': value})
+	f = urllib2.urlopen(url + '/kv/update', para)
+	return f.read()
+
+def countkey():
+	f = urllib2.urlopen(url + '/kvman/countkey')
+	return f.read()
+
+def dump():
+	f = urllib2.urlopen(url + '/kvman/dump')
+	return f.read()
+
+def shutdown():
+	f = urllib2.urlopen(url + '/kvman/shutdown')
+	return f.read()
+
+def clear():
+	data = json.loads(dump())
+	for i in data:
+		delete(i[0])
+	
+def insertAndGet(key):
+	global success
+	insert(str(key),str(key))
+	re=get(key)
+	if re.find('true') == -1:
+		success = False;
+
+os.system('bin/stopserver 0')
+os.system('bin/stopserver 1')
+os.system('bin/stopserver 2')
+os.system('bin/startserver 0')
+os.system('bin/startserver 1')
+os.system('bin/startserver 2')
+
+success = True
+
+pool = ThreadPool(20)
+pool.map(insertAndGet,range(40))
+
+
+print 'hello'
+#now, it should lost all the data!
+
+data = json.loads(dump())
+a = insert('clj', 'fhq')
+b = update('clj', 'FHQ')
+c = get('clj')
+d = countkey()
+e = delete('clj')
+f = insert(' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~', '')
+g = dump()
+
+for i in range(1):
+	if json.loads(a) != {"success":"true"}:
+		success = False
+	if json.loads(b) != {"success":"true"}:
+		success = False
+	if json.loads(c) != {"success":"true","value":"FHQ"}:
+		success = False
+	if json.loads(d) != {"result":"1"}:
+		success = False
+	if json.loads(e) != {"success":"true","value":"FHQ"}:
+		success = False
+	if json.loads(f) != {"success":"true"}:
+		success = False
+	if json.loads(g) != [[u' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~', u'']]:
+		success = False
+if success:
+	print 'Result: success'
+else:
+	print 'Result: fail'
+print >>sys.stderr, 'Insertion', '%d/%d' % (successinsert, totalinsert) 
+print >>sys.stderr, 'Average latency:', "%f/%f" % (sum(inserttime) / len(inserttime), sum(gettime) / len(gettime))
+
+inserttime = sorted(inserttime)
+gettime = sorted(gettime)
+print >>sys.stderr, 'Percentile latency:'
+for i in range(10):
+	print >>sys.stderr, inserttime[len(inserttime) * i / 10], gettime[len(gettime) * i / 10]
+
+
+os.system('bin/stopserver 0')
+os.system('bin/stopserver 1')
+os.system('bin/stopserver 2')

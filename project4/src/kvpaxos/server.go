@@ -78,7 +78,6 @@ func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) (string, bool) {
 		dv := kv.px.DecideList[i]
 		decided, _ := dv.(Op)
 
-		fmt.Println(decided, kv.database, i)
 		if decided.Type == GET {
 			res, exist := kv.database[decided.Key]
 			if exist {
@@ -133,7 +132,6 @@ func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) (string, bool) {
 		}
 		kv.px.Done(i)
 	}
-	fmt.Println(result, success)
 	return result, success
 }
 

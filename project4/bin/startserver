@@ -1,0 +1,12 @@
+#!/usr/bin/python
+import os
+import sys
+import time
+if len(sys.argv) >= 2:
+	if os.fork() > 0:
+		time.sleep(0.211)
+		sys.exit(0)
+	os.system('ln -s main bin/main' + sys.argv[1] + ' 2>/dev/null')
+	os.execv('bin/main' + sys.argv[1], ('bin/main' + sys.argv[1], str(sys.argv[1]),))
+else:
+	print 'which server do you want to start?'
