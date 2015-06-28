@@ -20,14 +20,15 @@ for i in range(1, nserver + 1):
 def checkalive(url): 
 	try:
 		urllib2.urlopen(url).read()
-	except:
+	except Exception as e:
 		return False
 	return True
 
-
 while True:
-	s = raw_input('You should fill ???? in "curl http://xx.xx.xx.xx:xxxx/????"\n')
+	s = raw_input('>>>')
 	for i in urls:
 		if checkalive(i):
 			os.system('curl "%s%s"' % (i, s))
 			break
+	else:
+		print 'too bad, all servers are dead'

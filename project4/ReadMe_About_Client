@@ -1,0 +1,12 @@
+We are extremely confused by the problem's statements about the ``client'' part.
+It is said that the ``client'' should mask the server's faults by re-trying another server. According to our understanding, our servers should provide Lab3-style HTTP interface, and this should the only means through which other programs can interact with our storage system. However, it is not possible to build on top of these HTTP interfaces a ``client'' program that guarantees at-most-once semantics, because replies from the server to the client may be lost. Without significantly modifying the HTTP interface (e.g. adding session ID), a client using only those HTTP interfaces cannot know whether the operation has been successfully performed.
+So we only guarantee the sequential consistency semantics on our _server_'s HTTP interface (not clients). Copied from problem statement:
+	Completed application calls to the HTTP requests must appear to have affected all replicas in the same order and have at-most-once semantics.
+Client won't receive HTTP requests. Servers do.
+
+The ``client'' program provided in bin/client.py is nothing but a convenient CLI utility that helps you to fill the ip part of the HTTP request. Nothing is guaranteed about it.
+Example usage:
+>>>kv/insert?key=hello&value=world
+{"success":"true"}
+>>>kvman/countkey
+{"result":"1"}
