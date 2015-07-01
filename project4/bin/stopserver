@@ -3,6 +3,9 @@ import os
 import sys
 import urllib2
 if len(sys.argv)>=2:
-	os.system('killall main' + sys.argv[1])
+	nodename=sys.argv[1]
+	if nodename[0]=='n':
+		nodename=str(int(nodename[1:])-1)
+	os.system('killall main' + nodename)
 else:
 	print 'which server do you want to stop?'

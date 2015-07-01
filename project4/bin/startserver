@@ -3,10 +3,13 @@ import os
 import sys
 import time
 if len(sys.argv) >= 2:
+	nodename=sys.argv[1]
+	if nodename[0]=='n':
+		nodename=str(int(nodename[1:])-1)
 	if os.fork() > 0:
 		time.sleep(0.211)
 		sys.exit(0)
-	os.system('ln -s main bin/main' + sys.argv[1] + ' 2>/dev/null')
-	os.execv('bin/main' + sys.argv[1], ('bin/main' + sys.argv[1], str(sys.argv[1]),))
+	os.system('ln -s main bin/main' + nodename + ' 2>/dev/null')
+	os.execv('bin/main' + nodename, ('bin/main' + nodename, nodename))
 else:
 	print 'which server do you want to start?'

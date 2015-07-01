@@ -279,13 +279,13 @@ func main() {
 	json.Unmarshal([]byte(configstr), &conf)
 
 	if len(os.Args) != 2 {
-		fmt.Println("Usage: main nodeid")
+		fmt.Println("Usage: main nodeid (from 0)")
 		return
 	}
 
 	me, err := strconv.Atoi(os.Args[1])
 	if err != nil {
-		fmt.Println("Usage: main nodeid(from 0)")
+		fmt.Println("Usage: main nodeid (from 0)")
 		return
 	}
 
