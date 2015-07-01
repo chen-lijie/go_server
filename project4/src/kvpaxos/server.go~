@@ -29,8 +29,6 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-	ClientID  string
-	ClientSeq int64
 	Type      string
 	Key       string
 	Value     string
@@ -153,8 +151,8 @@ func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) (string, bool) {
 }
 	
 func (kv *KVPaxos) GetRPC(args *GetArgs, reply *GetReply) error {
-	key, uuid, ck := args.Key, args.UUID, args.Me
-	result, _ := kv.Get(key, ck, uuid)
+	key, uuid, _ := args.Key, args.UUID, args.Me
+	result, _ := kv.Get(key, strconv.FormatInt(uuid,10))
 	reply.Value = result
 	return nil
 }
@@ -162,7 +160,7 @@ func (kv *KVPaxos) GetRPC(args *GetArgs, reply *GetReply) error {
 
 func (kv *KVPaxos) PutRPC(args *PutArgs, reply *PutReply) error {
 	key, value, dohash, uuid, ck := args.Key, args.Value, args.DoHash, args.UUID, args.Me
-	result,_ := kv.Put(key, value, ck, uuid)
+	result,_ := kv.Put(key, value, strconv.FormatInt(uuid,10))
 	if dohash {
 		reply.PreviousValue = result
 	} else {
@@ -171,11 +169,11 @@ func (kv *KVPaxos) PutRPC(args *PutArgs, reply *PutReply) error {
 	return nil
 }
 
-func (kv *KVPaxos) Put(key string, value string, id string, seq int64) (string,bool) {
+func (kv *KVPaxos) Put(key string, value string, session_id string) (string,bool) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, PUT, key, value}
+	op := Op{PUT, key, value, session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -262,11 +260,7 @@ func (kv *KVPaxos) Delete(key string, session_id string) (string, bool) {
 	return value, ok
 }
 
-<<<<<<< HEAD
-func (kv *KVPaxos) Count(id string, seq int64) int {
-=======
 func (kv *KVPaxos) Count(session_id string) int {
->>>>>>> d321d4a254abdcd1c0037dd60c078993aeeddc9f
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
@@ -290,11 +284,7 @@ func (kv *KVPaxos) Count(session_id string) int {
 	return thankstofhq
 }
 
-<<<<<<< HEAD
-func (kv *KVPaxos) Dump(id string, seq int64) string {
-=======
 func (kv *KVPaxos) Dump(session_id string) string {
->>>>>>> d321d4a254abdcd1c0037dd60c078993aeeddc9f
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
@@ -317,11 +307,7 @@ func (kv *KVPaxos) Dump(session_id string) string {
 	return value
 }
 
-<<<<<<< HEAD
-func (kv *KVPaxos) Get(key string, id string, seq int64) (string, bool) {
-=======
 func (kv *KVPaxos) Get(key string, session_id string) (string, bool) {
->>>>>>> d321d4a254abdcd1c0037dd60c078993aeeddc9f
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 

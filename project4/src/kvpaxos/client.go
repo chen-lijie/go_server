@@ -1,7 +1,7 @@
 package kvpaxos
 
 import "net/rpc"
-import "fmt"
+//import "fmt"
 import "strconv"
 import "time"
 
@@ -68,10 +68,10 @@ func (ck *Clerk) Get(key string) string {
 	for !succeed{
 		succeed = call(ck.servers[servInex], "KVPaxos.GetRPC", arg, &reply)
 		if succeed{
-			fmt.Printf("ck:%s send/get key %s srv:%d %d succ\n", ck.me, arg.Key, servInex, arg.UUID % 10000)
+			//fmt.Printf("ck:%s send/get key %s srv:%d %d succ\n", ck.me, arg.Key, servInex, arg.UUID % 10000)
 			return reply.Value
 		} else{
-			fmt.Printf("ck:%s send/get key %s srv:%d %d fail\n", ck.me, arg.Key, servInex, arg.UUID % 10000)
+			//fmt.Printf("ck:%s send/get key %s srv:%d %d fail\n", ck.me, arg.Key, servInex, arg.UUID % 10000)
 		}
 		servInex = (servInex + 1) % len(ck.servers)
 		time.Sleep(time.Second * 2)
@@ -92,10 +92,10 @@ func (ck *Clerk) PutExt(key string, value string, dohash bool) string {
 	for !succeed{
 		succeed = call(ck.servers[servInex], "KVPaxos.PutRPC", arg, &reply)
 		if succeed{
-			fmt.Printf("ck:%s send/put key %s value %s srv:%d %d succ\n", ck.me, arg.Key, arg.Value, servInex, arg.UUID % 1000000)
+			//fmt.Printf("ck:%s send/put key %s value %s srv:%d %d succ\n", ck.me, arg.Key, arg.Value, servInex, arg.UUID % 1000000)
 			return reply.PreviousValue
 		} else{
-			fmt.Printf("ck:%s send/put key %s value %s srv:%d %d fail\n", ck.me, arg.Key, arg.Value, servInex, arg.UUID % 1000000)
+			//fmt.Printf("ck:%s send/put key %s value %s srv:%d %d fail\n", ck.me, arg.Key, arg.Value, servInex, arg.UUID % 1000000)
 		}
 		servInex = (servInex + 1) % len(ck.servers)
 		time.Sleep(time.Second * 2)
