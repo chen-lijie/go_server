@@ -2,8 +2,11 @@ Example Usage of client:
 
 $bin/client.py 'kv/insert?key=hello&value=world'
 127.0.0.2 {"success":"true"}
-$bin/client.py 'kvman/countkey'
+$bin/client.py 'kvman/countkey?session=71397af72e530'
 127.0.0.1 {"result":"5"}
+
+Notice that kvman/shutdown really shutdowns the server. That is, you should never
+expect to interact with it anymore.
 
 The HTTP server accepts a session id. These ids MUST be different for each request.
 If no session id is provided, and you lose the response, you will never know whether

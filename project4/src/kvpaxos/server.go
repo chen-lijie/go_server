@@ -8,7 +8,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
-	"../paxos"
+	"paxos"
 	"strconv"
 	"sync"
 	"syscall"
@@ -89,14 +89,17 @@ func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) (string, bool) {
 				result = res
 				success = true
 			} else {
+				result = ""
 				success = false
 			}
 		} else if decided.Type == INSERT {
 			_, exist := kv.database[decided.Key]
 			if exist {
+				result = ""
 				success = false
 			} else {
 				kv.database[decided.Key] = decided.Value
+				result = ""
 				success = true
 			}
 			result = ""
@@ -104,8 +107,10 @@ func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) (string, bool) {
 			_, exist := kv.database[decided.Key]
 			if exist {
 				kv.database[decided.Key] = decided.Value
+				result = ""
 				success = true
 			} else {
+				result = ""
 				success = false
 			}
 			result = ""
@@ -170,6 +175,7 @@ func (kv *KVPaxos) PutRPC(args *PutArgs, reply *PutReply) error {
 }
 
 func (kv *KVPaxos) Put(key string, value string, session_id string) (string,bool) {
+	//fmt.Printf("Put %s %s session %s\n",key,value,session_id);
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
@@ -188,7 +194,9 @@ func (kv *KVPaxos) Put(key string, value string, session_id string) (string,bool
 	}
 
 	kv.seq = seqnum + 1
-	return kv.WaitAllDone(startnum, seqnum)
+	result,success := kv.WaitAllDone(startnum, seqnum)
+	//fmt.Printf("Put %s %s session %s uses sequence number %d result %s\n",key,value,session_id,seqnum,result);
+	return result,success
 }
 
 func (kv *KVPaxos) Insert(key string, value string, session_id string) bool {
@@ -308,6 +316,7 @@ func (kv *KVPaxos) Dump(session_id string) string {
 }
 
 func (kv *KVPaxos) Get(key string, session_id string) (string, bool) {
+	//fmt.Printf("Get %s session %s\n",key,session_id);
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
@@ -327,6 +336,7 @@ func (kv *KVPaxos) Get(key string, session_id string) (string, bool) {
 
 	kv.seq = seqnum + 1
 	value, ok := kv.WaitAllDone(startnum, seqnum)
+	//fmt.Printf("Get %s session %s uses sequence number %d result %s\n",key,session_id,seqnum,value);
 	return value, ok
 }
 
