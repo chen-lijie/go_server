@@ -6,97 +6,73 @@ import (
 	"time"
 	"io/ioutil"
 	"encoding/json"
-	"sync"
 	"strconv"
 	"os"
 	"strings"
+	crand "crypto/rand"
+	mrand "math/rand"
+	"math/big"
 )
 import "kvpaxos"
 import "runtime"
 
 type DataManager struct{
-	seq int
-	me int
-	mu sync.Mutex
 }
 
 var kvp *kvpaxos.KVPaxos
 
 func NewDataManager(me int) *DataManager{
 	var m *DataManager = new(DataManager)
-	m.seq = 0
-	m.me = me
 	return m
 }
 
-func (m * DataManager) Insert(key string,value string) bool {
-	m.mu.Lock()
-	tmp := m.seq
-	m.seq += 1
-	m.mu.Unlock()
-
-	return kvp.Insert(key, value, tmp, m.me)
+func (m * DataManager) Insert(key string,value string, session_id string) bool {
+	return kvp.Insert(key, value, session_id)
 }
 
-func (m * DataManager) Delete(key string) (string, bool) {
-	m.mu.Lock()
-	tmp := m.seq
-	m.seq += 1
-	m.mu.Unlock()
-
-	v, present := kvp.Delete(key, tmp, m.me)
+func (m * DataManager) Delete(key string, session_id string) (string, bool) {
+	v, present := kvp.Delete(key, session_id)
 	if !present {
 		return v,false
 	}
 	return v,true
 }
 
-func (m * DataManager) Get(key string) (string, bool) {
-	m.mu.Lock()
-	tmp := m.seq
-	m.seq += 1
-	m.mu.Unlock()
-
-	v, present := kvp.Get(key, tmp, m.me)
+func (m * DataManager) Get(key string, session_id string) (string, bool) {
+	v, present := kvp.Get(key, session_id)
 	if !present {
 		return v,false
 	}
 	return v,true
 }
 
-func (m * DataManager) Update(key string,value string) bool {
-	m.mu.Lock()
-	tmp := m.seq
-	m.seq += 1
-	m.mu.Unlock()
-
-	present := kvp.Update(key, value, tmp, m.me)
+func (m * DataManager) Update(key string, value string, session_id string) bool {
+	present := kvp.Update(key, value, session_id)
 	if !present {
 		return false
 	}
 	return true
 }
 
-func (m * DataManager) CountKey() int {
-	m.mu.Lock()
-	tmp := m.seq
-	m.seq += 1
-	m.mu.Unlock()
-
-	v := kvp.Count(tmp, m.me)
+func (m * DataManager) CountKey(session_id string) int {
+	v := kvp.Count(session_id)
 	return v
 }
 
-func (m * DataManager) DumpArray() string {
-	m.mu.Lock()
-	tmp := m.seq
-	m.seq += 1
-	m.mu.Unlock()
-
-	s := kvp.Dump(tmp, m.me)
+func (m * DataManager) DumpArray(session_id string) string {
+	s := kvp.Dump(session_id)
 	return s
 }
 
+func getSessionId(r * http.Request) string {
+	id_arr,id_ok := r.Form["session"]
+	if id_ok && len(id_arr)==1 {
+		return id_arr[0]
+	}else{
+		randid := mrand.Int63()
+		return strconv.FormatInt(randid,10)
+	}
+}
 
 var datamanager *DataManager
 
@@ -137,7 +113,7 @@ func InsertHandler(w http.ResponseWriter, r * http.Request) {
 		}
 		return
 	}
-	success := datamanager.Insert(key,value)
+	success := datamanager.Insert(key,value,getSessionId(r))
 	response,_ := json.Marshal(map[string]string{
 		"success":strconv.FormatBool(success),
 	})
@@ -174,7 +150,7 @@ func UpdateHandler(w http.ResponseWriter, r * http.Request) {
 		}
 		return
 	}
-	success := datamanager.Update(key,value)
+	success := datamanager.Update(key,value,getSessionId(r))
 	response,_ := json.Marshal(map[string]string{
 		"success":strconv.FormatBool(success),
 	})
@@ -201,7 +177,7 @@ func GetHandler(w http.ResponseWriter, r * http.Request) {
 		}
 		return
 	}
-	value,success := datamanager.Get(key)
+	value,success := datamanager.Get(key,getSessionId(r))
 	response,_ := json.Marshal(map[string]string{
 		"success":strconv.FormatBool(success),
 		"value":value,
@@ -229,7 +205,7 @@ func DeleteHandler(w http.ResponseWriter, r * http.Request) {
 		}
 		return
 	}
-	value,success := datamanager.Delete(key)
+	value,success := datamanager.Delete(key,getSessionId(r))
 	response,_ := json.Marshal(map[string]string{
 		"success":strconv.FormatBool(success),
 		"value":value,
@@ -238,7 +214,7 @@ func DeleteHandler(w http.ResponseWriter, r * http.Request) {
 }
 
 func CountKeyHandler(w http.ResponseWriter, r * http.Request) {
-	nkeys := datamanager.CountKey()
+	nkeys := datamanager.CountKey(getSessionId(r))
 	response,_ := json.Marshal(map[string]string{
 		"result":strconv.Itoa(nkeys),
 	})
@@ -246,12 +222,12 @@ func CountKeyHandler(w http.ResponseWriter, r * http.Request) {
 }
 
 func DumpMapHandler(w http.ResponseWriter, r * http.Request) {
-	response := datamanager.DumpArray()
+	response := datamanager.DumpArray(getSessionId(r))
 	fmt.Fprintln(w, response)
 }
 
 func DumpHandler(w http.ResponseWriter, r * http.Request) {
-	response := datamanager.DumpArray()
+	response := datamanager.DumpArray(getSessionId(r))
 	fmt.Fprintln(w, response)
 }
 
@@ -263,6 +239,8 @@ func ShutdownHandler(w http.ResponseWriter, r * http.Request) {
 }
 
 func main() {
+	bigseed,_ := crand.Int(crand.Reader, big.NewInt(9223372036854775807))
+	mrand.Seed(bigseed.Int64())
 	runtime.GOMAXPROCS(2)
 
 	configstr, err:=ioutil.ReadFile("conf/settings.conf")

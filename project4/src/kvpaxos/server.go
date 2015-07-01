@@ -29,18 +29,15 @@ type Op struct {
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
-	ClientID  int
-	ClientSeq int
 	Type      string
 	Key       string
 	Value     string
+	SessionID string
 }
 
-
-type OpResult struct {
-	ClientSeq     int
-	PreviousValue string
-	//Type          string
+type SessionResult struct {
+	result       string
+	success     bool
 }
 
 type KVPaxos struct {
@@ -55,6 +52,7 @@ type KVPaxos struct {
 	seq          int
 
 	database     map[string]string
+	usedsession  map[string]SessionResult
 }
 
 func (kv *KVPaxos) WaitDecided(seq int) interface{} {
@@ -77,6 +75,13 @@ func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) (string, bool) {
 	for i := startnum; i <= seqnum; i++ {
 		dv := kv.px.DecideList[i]
 		decided, _ := dv.(Op)
+		session_id := decided.SessionID
+		oldresult, alreadyused := kv.usedsession[session_id]
+		if alreadyused{
+			result = oldresult.result
+			success = oldresult.success
+			continue
+		}
 
 		if decided.Type == GET {
 			res, exist := kv.database[decided.Key]
@@ -130,16 +135,17 @@ func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) (string, bool) {
 			result = string(response)
 			success = true
 		}
+		kv.usedsession[session_id]=SessionResult{result,success}
 		kv.px.Done(i)
 	}
 	return result, success
 }
 
-func (kv *KVPaxos) Insert(key string, value string, id int, seq int) bool {
+func (kv *KVPaxos) Insert(key string, value string, session_id string) bool {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, INSERT, key, value}
+	op := Op{INSERT, key, value, session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -158,11 +164,11 @@ func (kv *KVPaxos) Insert(key string, value string, id int, seq int) bool {
 	return ok
 }
 
-func (kv *KVPaxos) Update(key string, value string, id int, seq int) bool {
+func (kv *KVPaxos) Update(key string, value string, session_id string) bool {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, UPDATE, key, value}
+	op := Op{UPDATE, key, value, session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -181,11 +187,11 @@ func (kv *KVPaxos) Update(key string, value string, id int, seq int) bool {
 	return ok
 }
 
-func (kv *KVPaxos) Delete(key string, id int, seq int) (string, bool) {
+func (kv *KVPaxos) Delete(key string, session_id string) (string, bool) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, DELETE, key, ""}
+	op := Op{DELETE, key, "", session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -204,11 +210,11 @@ func (kv *KVPaxos) Delete(key string, id int, seq int) (string, bool) {
 	return value, ok
 }
 
-func (kv *KVPaxos) Count(id int, seq int) int {
+func (kv *KVPaxos) Count(session_id string) int {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, COUNT, "", ""}
+	op := Op{COUNT, "", "", session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -228,11 +234,11 @@ func (kv *KVPaxos) Count(id int, seq int) int {
 	return thankstofhq
 }
 
-func (kv *KVPaxos) Dump(id int, seq int) string {
+func (kv *KVPaxos) Dump(session_id string) string {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, DUMP, "", ""}
+	op := Op{DUMP, "", "", session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -251,11 +257,11 @@ func (kv *KVPaxos) Dump(id int, seq int) string {
 	return value
 }
 
-func (kv *KVPaxos) Get(key string, id int, seq int) (string, bool) {
+func (kv *KVPaxos) Get(key string, session_id string) (string, bool) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, GET, key, ""}
+	op := Op{GET, key, "", session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -301,13 +307,14 @@ func StartServerUseTCP(servers []string, me int, useTCP bool) *KVPaxos {
 	kv.me = me
 	kv.seq = 0
 	kv.database = make(map[string]string)
+	kv.usedsession = make(map[string]SessionResult)
 	kv.unreliable = false
 	rpcs := rpc.NewServer()
 	rpcs.Register(kv)
 
 	//kv.px = paxos.Make(servers, me, rpcs)
 	kv.px = paxos.MakeUseTCP(servers, me, rpcs, useTCP)
-	
+
 	conntype := "unix"
 	if useTCP {
 		conntype = "tcp"
