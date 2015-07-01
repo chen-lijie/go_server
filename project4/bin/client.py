@@ -6,29 +6,31 @@ import json
 import os
 import time
 import random
+import sys
 
 
 conf = json.loads(open('conf/settings.conf').read())
-nquerys = 44 # Thanks to fhq
 
-nserver = len(conf) - 1
-
-urls = []
-for i in range(1, nserver + 1):
-	 urls.append('http://%s:%s/' % (conf['n%02d' % i], conf['port']))
-
-def checkalive(url): 
-	try:
-		urllib2.urlopen(url).read()
-	except Exception as e:
-		return False
-	return True
-
-while True:
-	s = raw_input('>>>')
-	for i in urls:
-		if checkalive(i):
-			os.system('curl "%s%s"' % (i, s))
-			break
+def RunCommand(cmd):
+	port=conf['port']
+	keys=conf.keys()
+	random.shuffle(keys)
+	sessionid=str(random.random())
+	if '?' in cmd:
+		cmd=cmd+'&session='+sessionid
+	else:
+		cmd=cmd+'?session='+sessionid
+	for servername in keys:
+		if servername[0]=='n':
+			ip=conf[servername].split(':')[0]
+			try:
+				response=urllib2.urlopen('http://%s:%s/%s'%(ip,port,cmd)).read().strip()
+			except Exception as e:
+				continue
+			print ip,response
+			return response
 	else:
 		print 'too bad, all servers are dead'
+
+for cmd in sys.argv[1:]:
+	RunCommand(cmd)

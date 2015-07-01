@@ -3,11 +3,12 @@
 ./bin/startserver n03
 ./bin/startserver n04
 ./bin/startserver n05
-curl 'http://127.0.0.1:3060/kv/insert?key=hello&value=world'
-curl 'http://127.0.0.2:3060/kv/insert?key=foo&value=bar&session=xx123'
-curl 'http://127.0.0.3:3060/kv/delete?key=foo&session=xx234'
-curl 'http://127.0.0.4:3060/kv/insert?key=foo&value=bar&session=xx123'
-curl 'http://127.0.0.5:3060/kv/delete?key=foo&session=xx235'
+bin/client.py 'kv/insert?key=hello&value=world'
+bin/client.py 'kv/insert?key=hello1&value=world'
+bin/client.py 'kv/insert?key=hello2&value=world'
+bin/client.py 'kv/insert?key=hello3&value=world'
+bin/client.py 'kv/insert?key=hello4&value=world'
+bin/client.py 'kvman/countkey'
 ./bin/stopserver n01
 ./bin/stopserver n02
 ./bin/stopserver n03
