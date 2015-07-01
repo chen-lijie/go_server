@@ -290,6 +290,9 @@ func (kv *KVPaxos) Kill() {
 // me is the index of the current server in servers[].
 //
 func StartServer(servers []string, me int) *KVPaxos {
+	return StartServerUseTCP(servers, me, false)
+}
+func StartServerUseTCP(servers []string, me int, useTCP bool) *KVPaxos {
 	// call gob.Register on structures you want
 	// Go's RPC library to marshall/unmarshall.
 	gob.Register(Op{})
@@ -302,10 +305,16 @@ func StartServer(servers []string, me int) *KVPaxos {
 	rpcs := rpc.NewServer()
 	rpcs.Register(kv)
 
-	kv.px = paxos.Make(servers, me, rpcs)
-
-	os.Remove(servers[me])
-	l, e := net.Listen("unix", servers[me])
+	//kv.px = paxos.Make(servers, me, rpcs)
+	kv.px = paxos.MakeUseTCP(servers, me, rpcs, useTCP)
+	
+	conntype := "unix"
+	if useTCP {
+		conntype = "tcp"
+	}else{
+		os.Remove(servers[me])
+	}
+	l, e := net.Listen(conntype, servers[me])
 	if e != nil {
 		log.Fatal("listen error: ", e)
 	}
@@ -323,11 +332,20 @@ func StartServer(servers []string, me int) *KVPaxos {
 					conn.Close()
 				} else if kv.unreliable && (rand.Int63()%1000) < 100 {
 					// process the request but force discard of reply.
-					c1 := conn.(*net.UnixConn)
-					f, _ := c1.File()
-					err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
-					if err != nil {
-						fmt.Printf("shutdown: %v\n", err)
+					if useTCP {
+						c1 := conn.(*net.TCPConn)
+						f, _ := c1.File()
+						err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
+						if err != nil {
+							fmt.Printf("shutdown: %v\n", err)
+						}
+					} else {
+						c1 := conn.(*net.UnixConn)
+						f, _ := c1.File()
+						err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
+						if err != nil {
+							fmt.Printf("shutdown: %v\n", err)
+						}
 					}
 					go rpcs.ServeConn(conn)
 				} else {

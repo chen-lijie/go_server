@@ -1,0 +1,12 @@
+./bin/startserver n01
+./bin/startserver n02
+./bin/startserver n03
+./bin/startserver n04
+./bin/startserver n05
+curl 'http://127.0.0.1:3060/kv/insert?key=hello&value=world'
+curl 'http://127.0.0.5:3060/kvman/dump'
+./bin/stopserver n01
+./bin/stopserver n02
+./bin/stopserver n03
+./bin/stopserver n04
+./bin/stopserver n05

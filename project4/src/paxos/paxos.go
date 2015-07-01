@@ -12,7 +12,8 @@ package paxos
 //
 // The application interface:
 //
-// px = paxos.Make(peers []string, me string)
+// px = paxos.MakeUseTCP(peers []string, me string)
+// px = paxos.Make(peers []string, me string, useTCP bool)
 // px.Start(seq int, v interface{}) -- start agreement on new instance
 // px.Status(seq int) (decided bool, v interface{}) -- get info about an instance
 // px.Done(seq int) -- ok to forget all instances <= seq
@@ -42,6 +43,7 @@ type Paxos struct {
 	DecideList map[int]interface{}
 	DoneList   []int
 	agreement map[int]Proposal
+	useTCP     bool
 }
 
 const (
@@ -128,8 +130,12 @@ func (px *Paxos) UpdateProposalValue(seq int, newValue interface{}) {
 // please use call() to send all RPCs, in client.go and server.go.
 // please do not change this function.
 //
-func call(srv string, name string, args interface{}, reply interface{}) bool {
-	c, err := rpc.Dial("unix", srv)
+func call(srv string, name string, args interface{}, reply interface{},useTCP bool) bool {
+	conntype := "unix";
+	if (useTCP){
+		conntype = "tcp";
+	}
+	c, err := rpc.Dial(conntype, srv)
 	if err != nil {
 		err1 := err.(*net.OpError)
 		if err1.Err != syscall.ENOENT && err1.Err != syscall.ECONNREFUSED {
@@ -174,7 +180,7 @@ func (px *Paxos) Proposer(seq int, v interface{}) {
 					ok = true
 				}
 			} else {
-				ok = call(px.peers[i], "Paxos.Acceptor", args, &reply)
+				ok = call(px.peers[i], "Paxos.Acceptor", args, &reply,px.useTCP)
 			}
 
 			if ok {
@@ -223,7 +229,7 @@ func (px *Paxos) Proposer(seq int, v interface{}) {
 					ok = true
 				}
 			} else {
-				ok = call(px.peers[i], "Paxos.Acceptor", args, &reply)
+				ok = call(px.peers[i], "Paxos.Acceptor", args, &reply,px.useTCP)
 			}
 
 			if ok {
@@ -249,7 +255,7 @@ func (px *Paxos) Proposer(seq int, v interface{}) {
 			if i == px.me {
 				px.Acceptor(args, &reply)
 			} else {
-				call(px.peers[i], "Paxos.Acceptor", args, &reply)
+				call(px.peers[i], "Paxos.Acceptor", args, &reply,px.useTCP)
 			}
 		}
 
@@ -430,8 +436,14 @@ func (px *Paxos) Kill() {
 // the ports of all the paxos peers (including this one)
 // are in peers[]. this servers port is peers[me].
 //
-func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
+func Make(peers []string, me int, rpcs *rpc.Server) *Paxos{
+	//default to unix socket
+	return MakeUseTCP(peers, me, rpcs, false);
+}
+
+func MakeUseTCP(peers []string, me int, rpcs *rpc.Server, useTCP bool) *Paxos {
 	px := &Paxos{}
+	px.useTCP=useTCP;
 	px.peers = peers
 	px.me = me
 	px.DoneList = make([]int, len(px.peers))
@@ -450,8 +462,14 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 
 		// prepare to receive connections from clients.
 		// change "unix" to "tcp" to use over a network.
-		os.Remove(peers[me]) // only needed for "unix"
-		l, e := net.Listen("unix", peers[me])
+		if (px.useTCP){
+			os.Remove(peers[me]) // only needed for "unix"
+		}
+		conntype := "unix";
+		if (px.useTCP){
+			conntype = "tcp";
+		}
+		l, e := net.Listen(conntype, peers[me])
 		if e != nil {
 			log.Fatal("listen error: ", e)
 		}
@@ -470,11 +488,20 @@ func Make(peers []string, me int, rpcs *rpc.Server) *Paxos {
 						conn.Close()
 					} else if px.unreliable && (rand.Int63()%1000) < 200 {
 						// process the request but force discard of reply.
-						c1 := conn.(*net.UnixConn)
-						f, _ := c1.File()
-						err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
-						if err != nil {
-							fmt.Printf("shutdown: %v\n", err)
+						if (px.useTCP){
+							c1 := conn.(*net.TCPConn)
+							f, _ := c1.File()
+							err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
+							if err != nil {
+								fmt.Printf("shutdown: %v\n", err)
+							}
+						}else{
+							c1 := conn.(*net.UnixConn)
+							f, _ := c1.File()
+							err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
+							if err != nil {
+								fmt.Printf("shutdown: %v\n", err)
+							}
 						}
 						px.rpcCount++
 						go rpcs.ServeConn(conn)

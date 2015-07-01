@@ -9,6 +9,7 @@ import (
 	"sync"
 	"strconv"
 	"os"
+	"strings"
 )
 import "kvpaxos"
 import "runtime"
@@ -261,14 +262,8 @@ func ShutdownHandler(w http.ResponseWriter, r * http.Request) {
 	shutdownchan <- 0
 }
 
-func port(tag string, host int) string {
-	s := "/var/tmp/iloveclj-" + strconv.Itoa(host)
-	return s
-}
-
-
 func main() {
-	runtime.GOMAXPROCS(128)
+	runtime.GOMAXPROCS(2)
 
 	configstr, err:=ioutil.ReadFile("conf/settings.conf")
 	if err != nil{
@@ -291,16 +286,19 @@ func main() {
 
 	datamanager = NewDataManager(me)
 	name := fmt.Sprintf("n%02d", me + 1)
-	address := fmt.Sprintf("%s:%s", conf[name].(string), conf["port"].(string))
+	httpport := conf["port"].(string)
+	ip := strings.Split(conf[name].(string),":")[0]
+	address := ip + ":" + httpport
 
 	nservers := len(conf) - 1
 
 	var kvh []string = make([]string, nservers)
 	for i := 0; i < nservers; i++ {
-		kvh[i] = port("basic", i)
+		kvh[i] = conf[fmt.Sprintf("n%02d",i+1)].(string)
 	}
 
-	kvp = kvpaxos.StartServer(kvh, me)
+	//kvp = kvpaxos.StartServer(kvh, me)
+	kvp = kvpaxos.StartServerUseTCP(kvh, me, true)
 
 	s := &http.Server{
 		Addr:	address,
