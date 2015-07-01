@@ -34,13 +34,12 @@ type Op struct {
 	Type      string
 	Key       string
 	Value     string
+	SessionID string
 }
 
-
-type OpResult struct {
-	ClientSeq     int
-	PreviousValue string
-	//Type          string
+type SessionResult struct {
+	result       string
+	success     bool
 }
 
 type KVPaxos struct {
@@ -55,6 +54,7 @@ type KVPaxos struct {
 	seq          int
 
 	database     map[string]string
+	usedsession  map[string]SessionResult
 }
 
 func (kv *KVPaxos) WaitDecided(seq int) interface{} {
@@ -77,6 +77,13 @@ func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) (string, bool) {
 	for i := startnum; i <= seqnum; i++ {
 		dv := kv.px.DecideList[i]
 		decided, _ := dv.(Op)
+		session_id := decided.SessionID
+		oldresult, alreadyused := kv.usedsession[session_id]
+		if alreadyused{
+			result = oldresult.result
+			success = oldresult.success
+			continue
+		}
 
 		if decided.Type == GET {
 			res, exist := kv.database[decided.Key]
@@ -139,6 +146,7 @@ func (kv *KVPaxos) WaitAllDone(startnum int, seqnum int) (string, bool) {
 			}
 			kv.database[decided.Key] = decided.Value
 		}
+		kv.usedsession[session_id]=SessionResult{result,success}
 		kv.px.Done(i)
 	}
 	return result, success
@@ -185,11 +193,11 @@ func (kv *KVPaxos) Put(key string, value string, id string, seq int64) (string,b
 	return kv.WaitAllDone(startnum, seqnum)
 }
 
-func (kv *KVPaxos) Insert(key string, value string, id string, seq int64) bool {
+func (kv *KVPaxos) Insert(key string, value string, session_id string) bool {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, INSERT, key, value}
+	op := Op{INSERT, key, value, session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -208,11 +216,11 @@ func (kv *KVPaxos) Insert(key string, value string, id string, seq int64) bool {
 	return ok
 }
 
-func (kv *KVPaxos) Update(key string, value string, id string, seq int64) bool {
+func (kv *KVPaxos) Update(key string, value string, session_id string) bool {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, UPDATE, key, value}
+	op := Op{UPDATE, key, value, session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -231,11 +239,11 @@ func (kv *KVPaxos) Update(key string, value string, id string, seq int64) bool {
 	return ok
 }
 
-func (kv *KVPaxos) Delete(key string, id string, seq int64) (string, bool) {
+func (kv *KVPaxos) Delete(key string, session_id string) (string, bool) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, DELETE, key, ""}
+	op := Op{DELETE, key, "", session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -254,11 +262,12 @@ func (kv *KVPaxos) Delete(key string, id string, seq int64) (string, bool) {
 	return value, ok
 }
 
-func (kv *KVPaxos) Count(id string, seq int64) int {
+func (kv *KVPaxos) Count(session_id string) int {
+>>>>>>> d321d4a254abdcd1c0037dd60c078993aeeddc9f
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, COUNT, "", ""}
+	op := Op{COUNT, "", "", session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -278,11 +287,12 @@ func (kv *KVPaxos) Count(id string, seq int64) int {
 	return thankstofhq
 }
 
-func (kv *KVPaxos) Dump(id string, seq int64) string {
+func (kv *KVPaxos) Dump(session_id string) string {
+>>>>>>> d321d4a254abdcd1c0037dd60c078993aeeddc9f
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, DUMP, "", ""}
+	op := Op{DUMP, "", "", session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -301,11 +311,12 @@ func (kv *KVPaxos) Dump(id string, seq int64) string {
 	return value
 }
 
-func (kv *KVPaxos) Get(key string, id string, seq int64) (string, bool) {
+func (kv *KVPaxos) Get(key string, session_id string) (string, bool) {
+>>>>>>> d321d4a254abdcd1c0037dd60c078993aeeddc9f
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 
-	op := Op{id, seq, GET, key, ""}
+	op := Op{GET, key, "", session_id}
 	seqnum := kv.seq
 	startnum := seqnum
 	for {
@@ -340,6 +351,9 @@ func (kv *KVPaxos) Kill() {
 // me is the index of the current server in servers[].
 //
 func StartServer(servers []string, me int) *KVPaxos {
+	return StartServerUseTCP(servers, me, false)
+}
+func StartServerUseTCP(servers []string, me int, useTCP bool) *KVPaxos {
 	// call gob.Register on structures you want
 	// Go's RPC library to marshall/unmarshall.
 	gob.Register(Op{})
@@ -348,14 +362,21 @@ func StartServer(servers []string, me int) *KVPaxos {
 	kv.me = me
 	kv.seq = 0
 	kv.database = make(map[string]string)
+	kv.usedsession = make(map[string]SessionResult)
 	kv.unreliable = false
 	rpcs := rpc.NewServer()
 	rpcs.Register(kv)
 
-	kv.px = paxos.Make(servers, me, rpcs)
+	//kv.px = paxos.Make(servers, me, rpcs)
+	kv.px = paxos.MakeUseTCP(servers, me, rpcs, useTCP)
 
-	os.Remove(servers[me])
-	l, e := net.Listen("unix", servers[me])
+	conntype := "unix"
+	if useTCP {
+		conntype = "tcp"
+	}else{
+		os.Remove(servers[me])
+	}
+	l, e := net.Listen(conntype, servers[me])
 	if e != nil {
 		log.Fatal("listen error: ", e)
 	}
@@ -373,11 +394,20 @@ func StartServer(servers []string, me int) *KVPaxos {
 					conn.Close()
 				} else if kv.unreliable && (rand.Int63()%1000) < 100 {
 					// process the request but force discard of reply.
-					c1 := conn.(*net.UnixConn)
-					f, _ := c1.File()
-					err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
-					if err != nil {
-						fmt.Printf("shutdown: %v\n", err)
+					if useTCP {
+						c1 := conn.(*net.TCPConn)
+						f, _ := c1.File()
+						err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
+						if err != nil {
+							fmt.Printf("shutdown: %v\n", err)
+						}
+					} else {
+						c1 := conn.(*net.UnixConn)
+						f, _ := c1.File()
+						err := syscall.Shutdown(int(f.Fd()), syscall.SHUT_WR)
+						if err != nil {
+							fmt.Printf("shutdown: %v\n", err)
+						}
 					}
 					go rpcs.ServeConn(conn)
 				} else {
